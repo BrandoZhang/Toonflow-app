@@ -55,8 +55,8 @@ function serial(value: Runtime, action: () => Promise<void>) {
   return current;
 }
 
-async function openListener(app: Application, value: Runtime) {
-  if (value.server) return;
+// 创作 Web 入口：请求都标记为创作端后转发同一业务 app。
+export function creationGateway(app: Application) {
   const gateway = express();
   gateway.use((req, res, next) => {
     res.locals.multiTenantWeb = true;
@@ -68,7 +68,12 @@ async function openListener(app: Application, value: Runtime) {
     const body = errorFromCause(cause);
     res.status(body.code).json(body);
   });
-  const server = gateway.listen(creationPort, "0.0.0.0");
+  return gateway;
+}
+
+async function openListener(app: Application, value: Runtime) {
+  if (value.server) return;
+  const server = creationGateway(app).listen(creationPort, "0.0.0.0");
   server.on("connection", socket => { value.sockets.add(socket); socket.once("close", () => value.sockets.delete(socket)); });
   try {
     await new Promise<void>((resolve, reject) => {

@@ -12,7 +12,7 @@ import { isMobileLinkRequest } from "@/utils/mobileLink";
 import { changeMultiTenantEnabled } from "./runtime";
 import { isEnabled } from "./mode";
 
-export { startMultiTenantRuntime, stopMultiTenantRuntime } from "./runtime";
+export { creationGateway, startMultiTenantRuntime, stopMultiTenantRuntime } from "./runtime";
 export { creationPort, isEnabled } from "./mode";
 export { requestIdentity } from "./runtime";
 export { currentIdentity } from "./context";
