@@ -15,32 +15,46 @@ export const dataSourceSchema = z.discriminatedUnion("provider", [
 ]);
 export type DataSource = z.infer<typeof dataSourceSchema>;
 
-export async function openDatabase(dataDirectory: string, create = false): Promise<AdminDatabase | undefined> {
+async function multiTenantDirectory(dataDirectory: string) {
   const directory = resolve(dataDirectory, "multiTenant");
-  const configPath = resolve(directory, "dataSource.json");
-  if (create) await mkdir(directory, { recursive: true, mode: 0o700 });
   const directoryInfo = await lstat(directory).catch((error: NodeJS.ErrnoException) => {
     if (error.code === "ENOENT") return null;
     throw error;
   });
   if (!directoryInfo) return;
   if (!directoryInfo.isDirectory() || directoryInfo.isSymbolicLink()) throw new Error("多租户数据目录必须是普通目录");
-  if (create) {
-    try {
-      await writeAtomic(configPath, JSON.stringify({ provider: "sqlite", sqlite: { file: "multiTenant.sqlite" } }, null, 2), { exclusive: true, mode: 0o600 });
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-    }
-  }
+  return directory;
+}
+
+// 目录或配置文件不存在时返回 undefined，存在但无效时抛错。
+export async function readDataSource(dataDirectory: string): Promise<DataSource | undefined> {
+  const directory = await multiTenantDirectory(dataDirectory);
+  if (!directory) return;
+  const configPath = resolve(directory, "dataSource.json");
   const info = await lstat(configPath).catch((error: NodeJS.ErrnoException) => {
     if (error.code === "ENOENT") return null;
     throw error;
   });
   if (!info) return;
   if (!info.isFile() || info.isSymbolicLink() || info.size > 65536) throw new Error("多租户数据源配置文件无效");
-  let config: DataSource;
-  try { config = dataSourceSchema.parse(JSON.parse(await readFile(configPath, "utf8"))); }
+  try { return dataSourceSchema.parse(JSON.parse(await readFile(configPath, "utf8"))); }
   catch { throw new Error("多租户数据源配置无效，请检查配置文件"); }
+}
+
+export async function openDatabase(dataDirectory: string, create = false): Promise<AdminDatabase | undefined> {
+  const directory = resolve(dataDirectory, "multiTenant");
+  if (create) {
+    await mkdir(directory, { recursive: true, mode: 0o700 });
+    // 写入默认配置前先拒绝符号链接等非普通目录。
+    if (!await multiTenantDirectory(dataDirectory)) return;
+    try {
+      await writeAtomic(resolve(directory, "dataSource.json"), JSON.stringify({ provider: "sqlite", sqlite: { file: "multiTenant.sqlite" } }, null, 2), { exclusive: true, mode: 0o600 });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+    }
+  }
+  const config = await readDataSource(dataDirectory);
+  if (!config) return;
   if (config.provider === "mysql") {
     const { connectMysql } = await import("./mysql");
     return connectMysql(config.mysql);
