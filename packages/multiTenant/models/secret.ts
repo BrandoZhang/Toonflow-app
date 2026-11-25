@@ -13,11 +13,14 @@ type SecretPurpose = "cloud" | "execution" | "providers";
 
 function invalid(message: string): never { throw Object.assign(new Error(message), { status: 503 }); }
 
-function decodeKey(value: string) {
-  if (!/^[A-Za-z0-9+/]{43}=$/.test(value)) invalid("模型加密密钥无效，必须为 32 字节 Base64");
+export function isModelSecret(value: string) {
   const key = Buffer.from(value, "base64");
-  if (key.length !== 32 || key.toString("base64") !== value) invalid("模型加密密钥无效，必须为 32 字节 Base64");
-  return key;
+  return /^[A-Za-z0-9+/]{43}=$/.test(value) && key.length === 32 && key.toString("base64") === value;
+}
+
+function decodeKey(value: string) {
+  if (!isModelSecret(value)) invalid("模型加密密钥无效，必须为 32 字节 Base64");
+  return Buffer.from(value, "base64");
 }
 
 export function createModelSecret(dataDirectory: string) {

@@ -7,12 +7,13 @@ import type { AuthIdentity, ListUserOptions } from "@toonflow/multi-tenant-auth"
 import { createSourceMapping } from "@toonflow/multi-tenant-source-mapping";
 import type { SourceMapping } from "@toonflow/multi-tenant-source-mapping/config";
 import conf from "@/utils/conf";
+import { getDeployment } from "@/lib/deployment";
 import { assertAppRequest } from "@/utils/mcp/control";
 import { isMobileLinkRequest } from "@/utils/mobileLink";
 import { changeMultiTenantEnabled } from "./runtime";
 import { isEnabled } from "./mode";
 
-export { startMultiTenantRuntime, stopMultiTenantRuntime } from "./runtime";
+export { creationGateway, startMultiTenantRuntime, stopMultiTenantRuntime } from "./runtime";
 export { creationPort, isEnabled } from "./mode";
 export { requestIdentity } from "./runtime";
 export { currentIdentity } from "./context";
@@ -74,7 +75,9 @@ export function canSetup(req: Request) {
     && ["localhost", "127.0.0.1", "[::1]"].includes(req.hostname);
 }
 
+// 主机身份只来自本函数登记的原生宿主；集群形态拒绝登记，主机会话与主机创作登录随之返回 403。
 export function registerHostClient(app: Application, secret: string) {
+  if (getDeployment().mode === "cluster") throw new Error("集群模式不支持原生主机身份");
   if (secret.length < 32 || secret.length > 256) throw new Error("主机身份凭据无效");
   hostClients.set(app, { secretHash: digest(secret), token: randomBytes(32).toString("hex") });
 }
@@ -106,7 +109,8 @@ export function setup(req: Request, userName: string, password: string, enabled:
   if (!canSetup(req)) throw Object.assign(new Error("请在宿主本机页面首次设置超级管理员账号和密码"), { status: 403 });
   const saving = setupQueue.then(async () => {
     await accessControl(() => control.setup(userName, password));
-    await changeMultiTenantEnabled(req.app, enabled, () => conf.set("settings.multiTenantEnabled", enabled), req.res);
+    // 集群形态始终开启多租户，首次设置只创建超管账号。
+    if (getDeployment().mode !== "cluster") await changeMultiTenantEnabled(req.app, enabled, () => conf.set("settings.multiTenantEnabled", enabled), req.res);
     return { configured: true, enabled: isEnabled() };
   });
   setupQueue = saving.then(() => {}, () => {});
