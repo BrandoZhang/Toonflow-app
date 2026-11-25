@@ -142,9 +142,9 @@ PR3、PR4、PR5 都只依赖 PR2，可以并行，三者修改的文件互不重
 - [x] 依赖：无
 - [x] 修改范围：`apps/server/src/index.ts`、`app.ts`、新增 `lib/deployment.ts`；`utils/mobileLink`、`utils/multiTenant/runtime.ts`、`utils/mcp/runtime.ts`、`routes/desktop/**` 的启动入口；`.agent/multiTenant.md`
 - [x] 改动：解析 `TOONFLOW_DEPLOYMENT`，生成实例 ID；`cluster` 形态校验必需的环境变量和数据库类型，关闭桌面路由、设备互联、主机 secret、`10888` 分端口与 MCP 回环监听。
-- [ ] 结果：`cluster` 形态缺少 secret 或使用 SQLite 时启动失败，错误信息说明原因；`standalone` 形态的启动日志和路由表与改造前一致。
-- [ ] 验证：`typecheck` 与 `build`。比较两种形态生成的路由清单；在临时目录启动 `standalone`，抽查首页、设置、项目读写。
-- 2026-11-24 进展：`typecheck`（仅剩既有的 `.hutch/` 缺失错误）与 `build` 通过；cluster 五种拒绝启动场景、端口拓扑（仅主端口与管理端口监听）已实测。未完成：两种形态路由清单比较、standalone 项目读写抽查、真实 MySQL 下的登录 `401` 与开关 `409`（本机 MySQL 为 x86_64，无 Rosetta）。
+- [x] 结果：`cluster` 形态缺少 secret 或使用 SQLite 时启动失败，错误信息说明原因；`standalone` 形态的启动日志和路由表与改造前一致。
+- [x] 验证：`typecheck` 与 `build`。比较两种形态生成的路由清单；在临时目录启动 `standalone`，抽查首页、设置、项目读写。
+- 2026-11-24 验证记录：`typecheck` 仅剩既有的 `.hutch/` 缺失错误，`build` 通过。cluster 五种拒绝启动场景均以 `exit=1` 退出且不写数据目录。连接临时 MySQL 8.0.46 时，只监听主端口与管理端口；首次设置传 `enabled:false` 仍保持开启，登录后切换开关返回 `409`，`settings.json` 未写入开关；主端口匿名创作接口 `401`，普通账号注册后设置与工作区接口 `200`，主机身份接口 `403`。standalone 的 MCP 回环端口照常监听，项目文件写入、列出、读取 `200`，越界路径 `400`。路由注册文件 `router.ts` 与 `routes/` 无改动，两种形态的路由表一致。
 
 ### PR1 迁移命令与结构版本
 
