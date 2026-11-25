@@ -9,6 +9,7 @@ import { creationPort, isEnabled } from "./mode";
 import { errorFromCause } from "@/lib/responseFormat";
 import { getAppOrigin } from "@/utils/mcp/control";
 import { stopMobileLinkRuntime } from "@/utils/mobileLink";
+import { getDeployment } from "@/lib/deployment";
 import { runWithIdentity } from "./context";
 
 type Runtime = { started: boolean; server?: Server; sockets: Set<Socket>; queue: Promise<void>; onEnabledChange?: (enabled: boolean) => void };
@@ -55,7 +56,7 @@ function serial(value: Runtime, action: () => Promise<void>) {
   return current;
 }
 
-// 创作 Web 入口：请求都标记为创作端后转发同一业务 app。
+// 创作 Web 入口：独立形态监听 10888，集群形态监听主端口；请求都标记为创作端后转发同一业务 app。
 export function creationGateway(app: Application) {
   const gateway = express();
   gateway.use((req, res, next) => {
@@ -101,7 +102,8 @@ export async function startMultiTenantRuntime(app: Application, onEnabledChange?
   value.started = true;
   value.onEnabledChange = onEnabledChange;
   await serial(value, async () => {
-    if (!isEnabled()) return;
+    // 集群形态由启动入口在主端口提供创作 Web，不开放 10888。
+    if (!isEnabled() || getDeployment().mode === "cluster") return;
     await openListener(app, value);
     stopMobileLinkRuntime(app);
   });
@@ -115,6 +117,7 @@ export async function stopMultiTenantRuntime(app: Application) {
 }
 
 export async function changeMultiTenantEnabled(app: Application, enabled: boolean, commit: () => void, response?: Response) {
+  if (getDeployment().mode === "cluster") throw Object.assign(new Error("集群模式始终开启多租户，不能切换"), { status: 409 });
   const value = runtime(app);
   await serial(value, async () => {
     if (!value.started) throw Object.assign(new Error("多租户服务尚未启动"), { status: 503 });
